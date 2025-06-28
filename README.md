@@ -126,6 +126,26 @@ You are able to select the desired views by using the --views parameter.
 ```shell
 python scripts/evaluation.py -g <path to gt> -r <path to renderings> # Compute error metrics on renderings
 ```
+## Viewer
+
+### Installation
+
+Our modified Viewer is located in the `DynamicGaussianViewer/` directory.  
+The build process is identical to that of the official Gaussian Splatting repository.
+
+To compile the viewer, please follow the official instructions:  
+👉 [https://github.com/graphdeco-inria/gaussian-splatting](https://github.com/graphdeco-inria/gaussian-splatting)
+
+```bash
+cd DynamicGaussianViewer/
+# Follow the same steps as in the official repo to build the viewer
+```
+### Usage
+```
+./install/bin/SIBR_gaussianViewer_app_rwdi.exe -m <path to the folder where cfg_args and cameras.json exist> -d <path to point clouds folder> -start <start frame> -end <end frame> 
+# optional: --step 1 --rendering-size 1920 1080 
+```
+
 ## License
 
 This project contains code from multiple sources with distinct licensing terms:
