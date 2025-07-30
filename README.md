@@ -45,6 +45,7 @@ First install CUDA and PyTorch, our code is evaluated on CUDA 11.8 and PyTorch 2
 conda install pytorch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 pytorch-cuda=11.8 -c pytorch -c nvidia
 pip install submodules/diff-gaussian-rasterization
 pip install submodules/simple-knn
+pip install submodules/fused-ssim
 pip install -r requirements.txt
 ```
 
