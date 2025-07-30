@@ -11,7 +11,8 @@
 import os
 import torch
 from random import randint
-from utils.loss_utils import l1_loss, ssim
+from utils.loss_utils import l1_loss
+from utils.loss_utils import fast_ssim as ssim
 from gaussian_renderer import render
 import sys
 from scene import Scene, GaussianModel
@@ -138,6 +139,7 @@ def training_joint(dataset, opt, pipe, lossp, testing_iterations, debug_from, is
             if iteration == opt.densify_until_iter and is_start_frame:
                 points_num = joint_gaussian._xyz.shape[0]
                 prune_scale = int(points_num // opt.joint_gs_num)
+                prune_scale = max(prune_scale, 1)
                 prune_mask = torch.ones(points_num, dtype=torch.bool, device=joint_gaussian._xyz.device)
                 prune_mask[::prune_scale] = False
                 joint_gaussian.prune_points(prune_mask)

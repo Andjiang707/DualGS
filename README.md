@@ -146,6 +146,9 @@ cd DynamicGaussianViewer/
 # optional: --step 1 --rendering-size 1920 1080 
 ```
 
+## Acknowledgments
+We would like to thank the authors of [Taming 3DGS](https://github.com/humansensinglab/taming-3dgs) for their excellent implementation, which was used in our project to replace the original 3DGS for acceleration.
+
 ## License
 
 This project contains code from multiple sources with distinct licensing terms:

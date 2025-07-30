@@ -14,6 +14,13 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from math import exp
 
+USE_FUSED_SSIM = True
+try:
+    from fused_ssim import fused_ssim
+except:
+    print("No fused ssim, using original ssim")
+    USE_FUSED_SSIM = False
+
 C1 = 0.01 ** 2
 C2 = 0.03 ** 2
 
@@ -64,3 +71,9 @@ def _ssim(img1, img2, window, window_size, channel, size_average=True):
         return ssim_map.mean()
     else:
         return ssim_map.mean(1).mean(1).mean(1)
+
+def fast_ssim(img1, img2, window_size=11, size_average=True):
+    if USE_FUSED_SSIM:
+        return fused_ssim(img1.unsqueeze(0), img2.unsqueeze(0))
+    else:
+        return ssim(img1, img2, window_size=window_size, size_average=size_average)

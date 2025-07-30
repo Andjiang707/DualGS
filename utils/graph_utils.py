@@ -90,6 +90,7 @@ class node_graph:
 
         return loss, loss_info
     
+    # @torch.compile # for acceleration, need torch >= 2.0
     def compute_rigid_loss(self, GaussianModel):
         rotations = GaussianModel._rotation 
         rel_rotations = quaternion_multiply(norm_quaternion(rotations), self.pre_rotations_inv)
