@@ -56,7 +56,7 @@ def training_joint(dataset, opt, pipe, lossp, testing_iterations, debug_from, is
 
     joint_gaussian = GaussianModel(dataset.sh_degree)
 
-    scene = Scene(dataset, joint_gaussian, dynamic_training = True, load_frame_id = frame_idx, ply_path = ply_path, parallel_load=parallel_load, stage = 1, warpDQB=warpDQB)
+    scene = Scene(dataset, joint_gaussian, dynamic_training = True, load_frame_id = frame_idx, ply_path = ply_path, parallel_load=parallel_load, stage = 1, warpDQB=warpDQB, key_frame=getattr(args, 'key_frame', None))
 
     joint_gaussian.training_setup_t1(opt)
 
@@ -171,9 +171,9 @@ def training_skin(dataset, opt, pipe, lossp, testing_iterations, debug_from, is_
     skin_gaussian = GaussianModel(dataset.sh_degree)
 
     if not is_start_frame:
-        warpDQB.loadMotion(args.motion_folder, frame_idx,  sequential = args.seq, start_frame=args.frame_st)
+        warpDQB.loadMotion(args.motion_folder, frame_idx,  sequential = args.seq, start_frame=args.frame_st, key_frame=getattr(args, 'key_frame', None))
 
-    scene = Scene(dataset, skin_gaussian, dynamic_training = True, load_frame_id = frame_idx, ply_path = ply_path, parallel_load=parallel_load, stage = 2, warpDQB = warpDQB, seq=args.seq)
+    scene = Scene(dataset, skin_gaussian, dynamic_training = True, load_frame_id = frame_idx, ply_path = ply_path, parallel_load=parallel_load, stage = 2, warpDQB = warpDQB, seq=args.seq, key_frame=getattr(args, 'key_frame', None))
 
     if is_start_frame == False and subseq_iters:
             opt.position_lr_max_steps = subseq_iters
@@ -341,6 +341,7 @@ if __name__ == "__main__":
     parser.add_argument('--parallel_load', action='store_true', default=False)
     parser.add_argument("--subseq_iters", type=int, default=None)
     parser.add_argument('--training_mode', type=int, default= 0, help="0: training motion and skin, 1: motion only, 2: skin only")
+    parser.add_argument('--key_frame', type=int, default=None, help="Key frame to start training from (will train this frame first, then forward and backward)")
     args = parser.parse_args(sys.argv[1:])
 
     model_path = str(args.model_path)
@@ -367,10 +368,30 @@ if __name__ == "__main__":
     joint_graph = node_graph()
     skin_graph = node_graph()
 
-    frame_range = range(args.frame_st, args.frame_ed, args.frame_step)
+    # 構建訓練幀序列：如果指定了 key_frame，則先訓練 key_frame，再訓練其他幀
+    if args.key_frame is not None:
+        # 確保 key_frame 在有效範圍內
+        if args.key_frame < args.frame_st or args.key_frame >= args.frame_ed:
+            print(f"Warning: key_frame {args.key_frame} is outside frame range [{args.frame_st}, {args.frame_ed})")
+            args.key_frame = None
+    
+    if args.key_frame is not None:
+        print(f"Using key frame training strategy with key frame: {args.key_frame}")
+        # 構建訓練序列：key_frame -> forward frames -> backward frames
+        forward_frames = list(range(args.key_frame + args.frame_step, args.frame_ed, args.frame_step))
+        backward_frames = list(range(args.key_frame - args.frame_step, args.frame_st - args.frame_step, -args.frame_step))
+        ordered_frames = [args.key_frame] + forward_frames + backward_frames
+        print(f"Training order: {ordered_frames}")
+    else:
+        # 使用原始的順序訓練
+        print("Using sequential training strategy")
+        ordered_frames = list(range(args.frame_st, args.frame_ed, args.frame_step))
+
     is_start_frame = True
 
-    for frame_idx in frame_range:
+    for frame_idx in ordered_frames:
+        print(f"\n=== Training Frame {frame_idx} (is_start_frame: {is_start_frame}) ===")
+        
         if args.training_mode == 0 or args.training_mode == 1:
             if args.motion_folder is None:
                 args.model_path = os.path.join(model_path, 'track')
@@ -378,8 +399,8 @@ if __name__ == "__main__":
                 args.model_path = args.motion_folder
             training_joint(lp.extract(args), op.extract(args), pp.extract(args), lossp1.extract(args), args.test_iterations, args.debug_from, is_start_frame, frame_idx, args=args)
 
-        if args.training_mode == 0 or args.training_mode == 2:    
-            args.model_path = model_path 
+        if args.training_mode == 0 or args.training_mode == 2:
+            args.model_path = model_path
             training_skin(lp.extract(args), op.extract(args), pp.extract(args), lossp2, args.test_iterations, args.debug_from, is_start_frame, frame_idx, args=args)
                         
         is_start_frame = False

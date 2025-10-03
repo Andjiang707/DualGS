@@ -25,7 +25,7 @@ class Scene:
 
     gaussians: GaussianModel
     def __init__(self, args : ModelParams, gaussians : GaussianModel, shuffle=True, resolution_scales=[1.0], dynamic_training = False, load_frame_id = -1, ply_path = None,
-                  parallel_load = False, no_image=False, stage = 1, warpDQB=None, seq=False):
+                  parallel_load = False, no_image=False, stage = 1, warpDQB=None, seq=False, key_frame=None):
         """b
         :param path: Path to colmap scene main folder.
         """
@@ -86,21 +86,47 @@ class Scene:
                         warpDQB.skin2JointInterpolation(warpDQB.raw_xyz )
 
                     if seq:
-                        
+                        # 對於 sequential 模式，嘗試載入前一幀
+                        reference_frame = load_frame_id - warpDQB.step_
                         self.gaussians.load_ply(os.path.join(self.model_path,
                                                                     "ckt",
-                                                                    "point_cloud_%d.ply") % (load_frame_id - warpDQB.step_), self.cameras_extent)
+                                                                    "point_cloud_%d.ply") % reference_frame, self.cameras_extent)
                         warpDQB.warping(self.gaussians, self.gaussians._xyz, self.gaussians._rotation)
                     else:
-                        self.gaussians.load_ply(os.path.join(self.model_path,
-                                                                    "ckt",
-                                                                    "point_cloud_%d.ply") % (warpDQB.stFrame_), self.cameras_extent)
+                        # 對於非 sequential 模式，優先嘗試從 key_frame 載入
+                        if key_frame is not None and key_frame != load_frame_id:
+                            try:
+                                CONSOLE.log(f"Trying to load from key frame: {key_frame}")
+                                self.gaussians.load_ply(os.path.join(self.model_path,
+                                                                            "ckt",
+                                                                            "point_cloud_%d.ply") % key_frame, self.cameras_extent)
+                            except:
+                                CONSOLE.log("Key frame not found, falling back to start frame")
+                                self.gaussians.load_ply(os.path.join(self.model_path,
+                                                                            "ckt",
+                                                                            "point_cloud_%d.ply") % (warpDQB.stFrame_), self.cameras_extent)
+                        else:
+                            self.gaussians.load_ply(os.path.join(self.model_path,
+                                                                        "ckt",
+                                                                        "point_cloud_%d.ply") % (warpDQB.stFrame_), self.cameras_extent)
                         warpDQB.warping(self.gaussians, warpDQB.raw_xyz, warpDQB.raw_rot)
 
                 else:
-                    self.gaussians.load_ply(os.path.join(self.model_path,
-                                                                "ckt",
-                                                                "point_cloud_%d.ply") % (load_frame_id - warpDQB.step_), self.cameras_extent)
+                    # Stage 1: 嘗試載入前一幀，如果失敗則嘗試 key_frame
+                    reference_frame = load_frame_id - warpDQB.step_
+                    try:
+                        self.gaussians.load_ply(os.path.join(self.model_path,
+                                                                    "ckt",
+                                                                    "point_cloud_%d.ply") % reference_frame, self.cameras_extent)
+                    except:
+                        if key_frame is not None and key_frame != load_frame_id:
+                            CONSOLE.log(f"Previous frame not found, trying key frame: {key_frame}")
+                            self.gaussians.load_ply(os.path.join(self.model_path,
+                                                                        "ckt",
+                                                                        "point_cloud_%d.ply") % key_frame, self.cameras_extent)
+                        else:
+                            raise  # 重新拋出異常，讓下面的 except 處理
+                    
                     with torch.no_grad():
                         self.gaussians._xyz += warpDQB.xyz_velocity
                

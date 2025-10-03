@@ -27,13 +27,28 @@ class Warpper():
         next_frame_idx = frame_idx - self.step_
         return next_frame_idx
     
-    def loadMotion(self, motionFolder, frame_idx, sequential = False, start_frame = 0):
-        last_idx = self.compute_last_frame(frame_idx)
-        start_frame = last_idx if (sequential and last_idx > start_frame) else start_frame
+    def loadMotion(self, motionFolder, frame_idx, sequential = False, start_frame = 0, key_frame = None):
+        # 優先使用 key_frame 作為參考幀
+        if key_frame is not None and key_frame != frame_idx:
+            reference_frame = key_frame
+            CONSOLE.log(f"Using key frame {key_frame} as reference for frame {frame_idx}")
+        else:
+            last_idx = self.compute_last_frame(frame_idx)
+            reference_frame = last_idx if (sequential and last_idx > start_frame) else start_frame
+            CONSOLE.log(f"Using reference frame {reference_frame} for frame {frame_idx}")
 
-        src = os.path.join(motionFolder, 'ckt', f'point_cloud_{start_frame}.ply')
-        self.src_gs = torch.from_numpy( read_ply_and_export_matrix(src)).cuda().to(torch.float32)
-        self.current_xyz = self.src_gs[:, :3]
+        try:
+            src = os.path.join(motionFolder, 'ckt', f'point_cloud_{reference_frame}.ply')
+            self.src_gs = torch.from_numpy( read_ply_and_export_matrix(src)).cuda().to(torch.float32)
+            self.current_xyz = self.src_gs[:, :3]
+        except Exception as e:
+            CONSOLE.log(f"Failed to load reference frame {reference_frame}: {e}")
+            # 如果載入參考幀失敗，回退到原始邏輯
+            last_idx = self.compute_last_frame(frame_idx)
+            reference_frame = last_idx if (sequential and last_idx > start_frame) else start_frame
+            src = os.path.join(motionFolder, 'ckt', f'point_cloud_{reference_frame}.ply')
+            self.src_gs = torch.from_numpy( read_ply_and_export_matrix(src)).cuda().to(torch.float32)
+            self.current_xyz = self.src_gs[:, :3]
 
         dst = os.path.join(motionFolder, 'ckt', f'point_cloud_{frame_idx}.ply')
         self.dst_gs = torch.from_numpy( read_ply_and_export_matrix(dst)).cuda().to(torch.float32)
