@@ -154,6 +154,14 @@ def training_joint(dataset, opt, pipe, lossp, testing_iterations, debug_from, is
     
     if is_start_frame:
         joint_graph.graph_init(joint_gaussian.get_xyz, k = 8)
+    else:
+        # 對於非起始幀，檢查是否需要重新初始化 graph
+        current_num_points = joint_gaussian.get_xyz.shape[0]
+        if (not hasattr(joint_graph, 'indices_') or
+            joint_graph.indices_ is None or
+            current_num_points != joint_graph.indices_.shape[0]):
+            CONSOLE.log(f"Reinitializing joint graph for frame {frame_idx} with {current_num_points} points")
+            joint_graph.graph_init(joint_gaussian.get_xyz, k = 8)
     
     joint_graph.regular_term_setup(joint_gaussian, velocity_option=True, warpDQB=warpDQB)
     
@@ -277,6 +285,14 @@ def training_skin(dataset, opt, pipe, lossp, testing_iterations, debug_from, is_
     if is_start_frame:
         warpDQB.record_gaussian(skin_gaussian)
         skin_graph.graph_init(skin_gaussian.get_xyz)
+    else:
+        # 對於非起始幀，檢查是否需要重新初始化 graph
+        current_num_points = skin_gaussian.get_xyz.shape[0]
+        if (not hasattr(skin_graph, 'indices_') or
+            skin_graph.indices_ is None or
+            current_num_points != skin_graph.indices_.shape[0]):
+            CONSOLE.log(f"Reinitializing skin graph for frame {frame_idx} with {current_num_points} points")
+            skin_graph.graph_init(skin_gaussian.get_xyz)
         
     skin_graph.regular_term_setup(skin_gaussian, velocity_option=False)
     if not is_start_frame:

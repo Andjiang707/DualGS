@@ -12,6 +12,17 @@ class node_graph:
     regular_xyz_joint = None
     
     def regular_term_setup(self, GaussianModel, velocity_option=False, warpDQB=None):
+        current_num_points = GaussianModel._xyz.shape[0]
+        
+        # 檢查點雲數量是否改變，如果改變則重新初始化 graph
+        if (hasattr(self, 'indices_') and
+            (self.indices_ is None or
+             current_num_points != self.indices_.shape[0] or
+             self.indices_.max() >= current_num_points)):
+            CONSOLE.log(f"Point cloud size changed from {getattr(self, 'prev_num_points', 'unknown')} to {current_num_points}, reinitializing graph")
+            self.graph_init(GaussianModel._xyz)
+            self.prev_num_points = current_num_points
+        
         if self.regular_xyz is None:
             self.regular_xyz = GaussianModel._xyz.clone().detach()
         if velocity_option:
@@ -23,9 +34,23 @@ class node_graph:
         self.regular_rotation = GaussianModel._rotation.clone().detach()
         self.regular_opacity = GaussianModel._opacity.clone().detach()
 
-        self.pre_rotations_inv = quaternion_inverse(self.regular_rotation)
-        self.prev_neighbor_points = self.regular_xyz[self.indices_]
-        self.prev_diff = self.regular_xyz.unsqueeze(1) - self.prev_neighbor_points
+        # 確保 indices_ 存在且有效
+        if hasattr(self, 'indices_') and self.indices_ is not None:
+            self.pre_rotations_inv = quaternion_inverse(self.regular_rotation)
+            # 確保 indices 不會超出邊界
+            valid_indices = self.indices_ < current_num_points
+            if not valid_indices.all():
+                CONSOLE.log("Some indices are out of bounds, reinitializing graph")
+                self.graph_init(GaussianModel._xyz)
+            
+            self.prev_neighbor_points = self.regular_xyz[self.indices_]
+            self.prev_diff = self.regular_xyz.unsqueeze(1) - self.prev_neighbor_points
+        else:
+            CONSOLE.log("Graph indices not found, initializing graph")
+            self.graph_init(GaussianModel._xyz)
+            self.pre_rotations_inv = quaternion_inverse(self.regular_rotation)
+            self.prev_neighbor_points = self.regular_xyz[self.indices_]
+            self.prev_diff = self.regular_xyz.unsqueeze(1) - self.prev_neighbor_points
 
     def graph_init(self, xyz, k=8, load_graph_path=None, filename=None, l=0.02):
         points_np = xyz.detach().cpu().numpy()
@@ -92,7 +117,21 @@ class node_graph:
     
     # @torch.compile # for acceleration, need torch >= 2.0
     def compute_rigid_loss(self, GaussianModel):
-        rotations = GaussianModel._rotation 
+        # 檢查點雲數量是否匹配
+        current_num_points = GaussianModel._xyz.shape[0]
+        if (not hasattr(self, 'pre_rotations_inv') or
+            self.pre_rotations_inv.shape[0] != current_num_points):
+            CONSOLE.log(f"Rigid loss: point count mismatch, reinitializing graph for {current_num_points} points")
+            self.regular_term_setup(GaussianModel)
+        
+        rotations = GaussianModel._rotation
+        
+        # 確保張量尺寸匹配
+        if rotations.shape[0] != self.pre_rotations_inv.shape[0]:
+            CONSOLE.log(f"Rotation tensor size mismatch: {rotations.shape[0]} vs {self.pre_rotations_inv.shape[0]}")
+            # 重新設置 regular terms
+            self.regular_term_setup(GaussianModel)
+        
         rel_rotations = quaternion_multiply(norm_quaternion(rotations), self.pre_rotations_inv)
         rel_rotations = norm_quaternion(rel_rotations)
         rel_rots = build_rotation(rel_rotations)
