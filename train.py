@@ -358,6 +358,7 @@ if __name__ == "__main__":
     parser.add_argument("--subseq_iters", type=int, default=None)
     parser.add_argument('--training_mode', type=int, default= 0, help="0: training motion and skin, 1: motion only, 2: skin only")
     parser.add_argument('--key_frame', type=int, default=None, help="Key frame to start training from (will train this frame first, then forward and backward)")
+    parser.add_argument('--force', action='store_true', default=False, help="Force retrain and overwrite existing PLY files")
     args = parser.parse_args(sys.argv[1:])
 
     model_path = str(args.model_path)
@@ -397,7 +398,21 @@ if __name__ == "__main__":
         forward_frames = list(range(args.key_frame + args.frame_step, args.frame_ed, args.frame_step))
         backward_frames = list(range(args.key_frame - args.frame_step, args.frame_st - args.frame_step, -args.frame_step))
         ordered_frames = [args.key_frame] + forward_frames + backward_frames
-        print(f"Training order: {ordered_frames}")
+        
+        # 檢查圖片目錄以驗證範圍
+        actual_max_frame = args.frame_ed - args.frame_step
+        image_dir = args.source_path
+        for frame in ordered_frames[:]:  # 複製列表以便修改
+            frame_dir = os.path.join(image_dir, str(frame))
+            if not os.path.exists(frame_dir):
+                print(f"Warning: Frame {frame} directory not found at {frame_dir}, removing from training sequence")
+                ordered_frames.remove(frame)
+        
+        if not ordered_frames:
+            print("Error: No valid frames found in the specified range!")
+            sys.exit(1)
+        
+        print(f"Training order (validated): {ordered_frames}")
     else:
         # 使用原始的順序訓練
         print("Using sequential training strategy")
@@ -408,16 +423,44 @@ if __name__ == "__main__":
     for frame_idx in ordered_frames:
         print(f"\n=== Training Frame {frame_idx} (is_start_frame: {is_start_frame}) ===")
         
-        if args.training_mode == 0 or args.training_mode == 1:
+        # 檢查是否已存在訓練結果
+        skip_joint = False
+        skip_skin = False
+        
+        if not args.force:
+            # 檢查 joint 階段的 PLY
+            if args.training_mode == 0 or args.training_mode == 1:
+                joint_ply_path = os.path.join(
+                    args.motion_folder if args.motion_folder else os.path.join(model_path, 'track'),
+                    "ckt",
+                    f"point_cloud_{frame_idx}.ply"
+                )
+                if os.path.exists(joint_ply_path):
+                    print(f"  ⏭️  Joint PLY already exists: {joint_ply_path}, skipping...")
+                    skip_joint = True
+            
+            # 檢查 skin 階段的 PLY
+            if args.training_mode == 0 or args.training_mode == 2:
+                skin_ply_path = os.path.join(model_path, "ckt", f"point_cloud_{frame_idx}.ply")
+                if os.path.exists(skin_ply_path):
+                    print(f"  ⏭️  Skin PLY already exists: {skin_ply_path}, skipping...")
+                    skip_skin = True
+        
+        # 執行訓練
+        if (args.training_mode == 0 or args.training_mode == 1) and not skip_joint:
             if args.motion_folder is None:
                 args.model_path = os.path.join(model_path, 'track')
             else:
                 args.model_path = args.motion_folder
             training_joint(lp.extract(args), op.extract(args), pp.extract(args), lossp1.extract(args), args.test_iterations, args.debug_from, is_start_frame, frame_idx, args=args)
 
-        if args.training_mode == 0 or args.training_mode == 2:
+        if (args.training_mode == 0 or args.training_mode == 2) and not skip_skin:
             args.model_path = model_path
             training_skin(lp.extract(args), op.extract(args), pp.extract(args), lossp2, args.test_iterations, args.debug_from, is_start_frame, frame_idx, args=args)
+        
+        # 如果兩個階段都被跳過，顯示訊息
+        if skip_joint and skip_skin:
+            print(f"  ✓ Frame {frame_idx} already trained, skipped (use --force to retrain)")
                         
         is_start_frame = False
         
