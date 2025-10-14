@@ -82,8 +82,13 @@ class Scene:
             try:
                 if self.stage == 2:
                     CONSOLE.log("loading motion from control point")
-                    if load_frame_id == warpDQB.stFrame_ + warpDQB.step_:
-                        warpDQB.skin2JointInterpolation(warpDQB.raw_xyz )
+                    # 檢查是否需要初始化 skin2Joint interpolation
+                    # 對於 key frame 模式，需要在第一個非起始幀時初始化
+                    if (load_frame_id == warpDQB.stFrame_ + warpDQB.step_ or
+                        (key_frame is not None and hasattr(warpDQB, 'raw_xyz') and
+                         not hasattr(warpDQB, 'indices_'))):
+                        CONSOLE.log(f"Initializing skin2Joint interpolation for frame {load_frame_id}")
+                        warpDQB.skin2JointInterpolation(warpDQB.raw_xyz)
 
                     if seq:
                         # 對於 sequential 模式，嘗試載入前一幀
