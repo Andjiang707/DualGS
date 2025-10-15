@@ -91,8 +91,15 @@ class Scene:
                         warpDQB.skin2JointInterpolation(warpDQB.raw_xyz)
 
                     if seq:
-                        # 對於 sequential 模式，嘗試載入前一幀
-                        reference_frame = load_frame_id - warpDQB.step_
+                        # 對於 sequential 模式，判斷訓練方向決定參考幀
+                        if key_frame is not None and load_frame_id < key_frame:
+                            # Backward training: 載入後一幀（已訓練過的）
+                            reference_frame = load_frame_id + warpDQB.step_
+                            CONSOLE.log(f"Backward training: loading frame {reference_frame} for frame {load_frame_id}")
+                        else:
+                            # Forward training: 載入前一幀
+                            reference_frame = load_frame_id - warpDQB.step_
+                        
                         self.gaussians.load_ply(os.path.join(self.model_path,
                                                                     "ckt",
                                                                     "point_cloud_%d.ply") % reference_frame, self.cameras_extent)
@@ -117,15 +124,22 @@ class Scene:
                         warpDQB.warping(self.gaussians, warpDQB.raw_xyz, warpDQB.raw_rot)
 
                 else:
-                    # Stage 1: 嘗試載入前一幀，如果失敗則嘗試 key_frame
-                    reference_frame = load_frame_id - warpDQB.step_
+                    # Stage 1: 判斷訓練方向決定參考幀
+                    if key_frame is not None and load_frame_id < key_frame:
+                        # Backward training: 載入後一幀（已訓練過的）
+                        reference_frame = load_frame_id + warpDQB.step_
+                        CONSOLE.log(f"Stage 1 Backward training: loading frame {reference_frame} for frame {load_frame_id}")
+                    else:
+                        # Forward training: 載入前一幀
+                        reference_frame = load_frame_id - warpDQB.step_
+                    
                     try:
                         self.gaussians.load_ply(os.path.join(self.model_path,
                                                                     "ckt",
                                                                     "point_cloud_%d.ply") % reference_frame, self.cameras_extent)
                     except:
                         if key_frame is not None and key_frame != load_frame_id:
-                            CONSOLE.log(f"Previous frame not found, trying key frame: {key_frame}")
+                            CONSOLE.log(f"Reference frame {reference_frame} not found, trying key frame: {key_frame}")
                             self.gaussians.load_ply(os.path.join(self.model_path,
                                                                         "ckt",
                                                                         "point_cloud_%d.ply") % key_frame, self.cameras_extent)
